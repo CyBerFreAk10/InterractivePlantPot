@@ -1,0 +1,97 @@
+import ollama
+import pyttsx3
+import json
+from datetime import datetime
+
+# --- CONFIGURATION ---
+# We are using the smallest possible model to give it the best chance.
+OLLAMA_MODEL = 'gemma:2b' 
+
+# --- ALARM THRESHOLDS ---
+SOIL_CRITICALLY_LOW = 20
+SOIL_CRITICALLY_HIGH = 95
+TEMP_CRITICALLY_LOW = 15
+TEMP_CRITICALLY_HIGH = 35
+LIGHT_CRITICALLY_LOW = 20
+LIGHT_CRITICALLY_HIGH = 95
+
+# --- INITIALIZE TTS ENGINE ---
+try:
+    engine = pyttsx3.init()
+except Exception as e:
+    print(f"CRITICAL: Could not initialize TTS engine: {e}")
+    engine = None
+
+def speak(text):
+    """Handles the text-to-speech functionality."""
+    if engine and text:
+        try:
+            engine.say(text)
+            engine.runAndWait()
+        except Exception as e:
+            print(f"Error during TTS speech: {e}")
+    else:
+        print(f"(Simulated Speech): {text}")
+
+def agent_llm(sensor_data, emergency_context=None):
+    """The core AI function."""
+    soil = sensor_data.get("soil", 50)
+    light = sensor_data.get("light", 50)
+    temp = sensor_data.get("temp", 25)
+    prompt = ""
+
+    if emergency_context:
+        mood_map = {
+            "thirsty": "thirsty", "cold": "sad", "hot": "sad",
+            "overwatered": "sad", "low_light": "sad", "high_light": "sad"
+        }
+        emergency_mood = mood_map.get(emergency_context, "sad")
+        prompt = f"""
+        You are a cute plant pet in a critical state: **{emergency_context}**.
+        Readings: Soil={soil}%, Light={light}%, Temp={temp}°C.
+        Generate a short, urgent, creative sentence for this emergency.
+        Return JSON with "mood": "{emergency_mood}" and your "speech".
+        """
+    else:
+        now = datetime.now()
+        current_time_str = now.strftime("%I:%M %p")
+        prompt = f"""
+        You are a cute plant pet. It is {current_time_str}.
+        React to subtle, non-critical conditions. Your mood can be "happy", "sad", or "neutral".
+        Readings: Soil={soil}%, Light={light}%, Temp={temp}°C.
+        Return your response as a single, valid JSON object with "mood" and "speech" keys.
+        """
+    try:
+        response = ollama.chat(model=OLLAMA_MODEL, messages=[{'role': 'user', 'content': prompt}])
+        text = response['message']['content']
+        json_str = text[text.find('{'):text.rfind('}')+1]
+        data = json.loads(json_str)
+        mood = data.get("mood", "neutral")
+        speech = data.get("speech", "")
+        return mood, speech
+    except Exception as e:
+        print(f"Error processing LLM response: {e}. Defaulting to neutral.")
+        return "neutral", "I'm feeling a bit quiet..."
+
+def get_plant_status(sensor_data):
+    """This is the main function called by the UI."""
+    emergency_type = None
+    if sensor_data.get("soil", 50) < SOIL_CRITICALLY_LOW: emergency_type = "thirsty"
+    elif sensor_data.get("soil", 50) > SOIL_CRITICALLY_HIGH: emergency_type = "overwatered"
+    elif sensor_data.get("temp", 25) < TEMP_CRITICALLY_LOW: emergency_type = "cold"
+    elif sensor_data.get("temp", 25) > TEMP_CRITICALLY_HIGH: emergency_type = "hot"
+    elif sensor_data.get("light", 50) < LIGHT_CRITICALLY_LOW: emergency_type = "low_light"
+    elif sensor_data.get("light", 50) > LIGHT_CRITICALLY_HIGH: emergency_type = "high_light"
+
+    if emergency_type:
+        print(f"Critical condition: {emergency_type}. Asking AI for creative response.")
+        # CORRECTED: Added the missing 'return' statement
+        return agent_llm(sensor_data, emergency_context=emergency_type)
+    else:
+        # CORRECTED: Added the missing 'return' statement
+        return agent_llm(sensor_data)
+
+def cleanup():
+    """A function to handle cleanup when the app closes."""
+    print("AI Agent is shutting down.")
+

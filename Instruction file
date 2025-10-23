@@ -1,0 +1,11 @@
+For the AI Agent integration to work, download these dependancies
+1. Kivy
+2. Homebrew
+3. Ollama application with gemma:2b model
+4. pyttsx3 library
+5. installing ollama in your vs code
+6. venv creation (not a dependency to download, it exists)
+Use the files advanced_UI_UX.py, ai_agent_trimmed.py first and then with ai_agent_further_trimmed.py and senor_simulator.py
+Integrate the above mentioned files by placing all of them within a single folder and use gemini pro to set up the venv environment and execute them 
+If possible use static images instead of videos for the plant emotion display
+
