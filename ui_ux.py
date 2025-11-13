@@ -5,15 +5,13 @@ from kivy.core.window import Window
 from kivy.properties import BooleanProperty, StringProperty, ObjectProperty
 from kivy.animation import Animation
 from kivy.clock import Clock
-from kivy.uix.popup import Popup
+# --- MODIFIED: Changed Popup to ModalView to fix keyboard ---
+from kivy.uix.modalview import ModalView
 from kivy.uix.spinner import Spinner
 import os
-# import io  <--- REMOVED
 import json
 
 # --- VOICE & MQTT IMPORTS ---
-# import pygame  <--- REMOVED
-# from gtts import gTTS  <--- REMOVED
 import paho.mqtt.client as mqtt
 
 # --- NO AI OR SENSOR IMPORTS HERE ---
@@ -38,8 +36,6 @@ KV_STRING = """
         pos_hint: {'center_x': 0.5, 'center_y': 0.45}
         background_color: 0, 0, 0, 0 # Invisible
         on_press: root.play_touch_effect()
-
-    # --- Sensor panel has been removed ---
 
     Button:
         text: 'Exit'
@@ -70,20 +66,23 @@ KV_STRING = """
         on_press: root.show_plant_info()
         background_color: 0.2, 0.7, 0.3, 0.9
 
-# --- AI CHAT POPUP ---
+# --- MODIFIED: Changed from Popup to ModalView ---
 <PlantAiPopup>:
     id: ai_popup
-    title: ""
     size_hint: 0.9, 0.7
     auto_dismiss: False
-    background_color: 0.1, 0.12, 0.15, 0.9
-    separator_height: 0
-    on_dismiss: root.on_dismiss()
-
+    
     BoxLayout:
         orientation: 'vertical'
         padding: '10dp'
         spacing: '10dp'
+        canvas.before:
+            Color:
+                rgba: 0.1, 0.12, 0.15, 0.9
+            Rectangle:
+                pos: self.pos
+                size: self.size
+        
         BoxLayout:
             size_hint_y: None
             height: '40dp'
@@ -98,7 +97,6 @@ KV_STRING = """
                 size: '40dp', '40dp'
                 on_press: root.dismiss()
         
-        # --- This is the chat history window ---
         ScrollView:
             size_hint: 1, 1
             scroll_y: 0 
@@ -119,29 +117,37 @@ KV_STRING = """
             TextInput:
                 id: text_input
                 hint_text: "Ask your plant..."
-                size_hint_x: 0.8
+                size_hint_x: 0.7
                 use_vkeyboard: True
                 multiline: False
                 on_text_validate: root.send_chat_message(self)
             Button:
+                id: send_button
+                text: "Send"
+                size_hint_x: 0.15
+                on_press: root.send_chat_message(text_input)
+            Button:
                 id: mic_button
                 text: "Mic"
-                size_hint_x: 0.2
-                on_press: root.send_chat_message(text_input)
+                size_hint_x: 0.15
+                on_press: root.mic_pressed()
 
-# --- PLANT INFO POPUP ---
+# --- MODIFIED: Changed from Popup to ModalView ---
 <PlantInfoPopup>:
-    # ... (This is unchanged) ...
     id: info_popup
-    title: ""
     size_hint: 0.9, 0.7
     auto_dismiss: False
-    background_color: 0.1, 0.12, 0.15, 0.9
-    separator_height: 0
+    
     BoxLayout:
         orientation: 'vertical'
         padding: '10dp'
         spacing: '10dp'
+        canvas.before:
+            Color:
+                rgba: 0.1, 0.12, 0.15, 0.9
+            Rectangle:
+                pos: self.pos
+                size: self.size
         BoxLayout:
             size_hint_y: None
             height: '40dp'
@@ -187,19 +193,22 @@ KV_STRING = """
                     "[b]Toxicity:[/b]\\n" + \\
                     "Mildly toxic to pets and humans if ingested. Keep out of reach."
 
-# --- LIVE DATA POPUP ---
+# --- MODIFIED: Changed from Popup to ModalView ---
 <LiveDataPopup>:
-    # ... (This is unchanged) ...
     id: data_popup
-    title: ""
     size_hint: 0.9, 0.5
     auto_dismiss: False
-    background_color: 0.1, 0.12, 0.15, 0.9
-    separator_height: 0
+    
     BoxLayout:
         orientation: 'vertical'
         padding: '10dp'
         spacing: '10dp'
+        canvas.before:
+            Color:
+                rgba: 0.1, 0.12, 0.15, 0.9
+            Rectangle:
+                pos: self.pos
+                size: self.size
         BoxLayout:
             size_hint_y: None
             height: '40dp'
@@ -236,10 +245,6 @@ KV_STRING = """
 """ 
 Builder.load_string(KV_STRING)
 
-# --- Initialize the pygame mixer ---
-# pygame.mixer.init() <--- REMOVED
-# (All pyttsx3/gTTS initializations are gone)
-
 # --- MQTT Settings ---
 BROKER_ADDRESS = "localhost"
 CLIENT_ID = "plant_ui"
@@ -248,17 +253,25 @@ TOPIC_SENSOR_REQUEST = "plant/sensor/request"
 TOPIC_CHAT_REQUEST = "plant/chat/request"
 
 
-# --- AI CHAT POPUP CLASS ---
-class PlantAiPopup(Popup):
+# --- MODIFIED: Changed from Popup to ModalView ---
+class PlantAiPopup(ModalView):
     main_layout = ObjectProperty(None)
     
     def on_open(self):
+        # --- MODIFIED: Schedule focus to fix keyboard ---
+        # This waits 0.1s for the popup to finish opening, then forces focus
+        Clock.schedule_once(self.set_focus_on_input, 0.1)
+        
+    def set_focus_on_input(self, dt):
+        """Forces focus on the text input."""
         self.ids.text_input.focus = True
         
     def on_dismiss(self):
         """Called when the popup is closed."""
         if self.main_layout:
-            self.main_layout.ai_popup = None # Clear the reference
+            self.main_layout.ai_popup = None
+            # --- MODIFIED: Clear the focus flag ---
+            self.main_layout.popup_is_open = False
 
     def send_chat_message(self, text_input_widget):
         message = text_input_widget.text
@@ -266,7 +279,6 @@ class PlantAiPopup(Popup):
             print("No message to send.")
             return
 
-        # <--- MODIFIED: This is the only place text is added for "You" ---
         self.ids.chat_history.text += f"[color=3399FF]You:[/color] {message}\n"
         
         if self.main_layout and self.main_layout.mqtt_client:
@@ -274,24 +286,38 @@ class PlantAiPopup(Popup):
                 print(f"Sending chat message: '{message}'")
                 self.main_layout.mqtt_client.publish(TOPIC_CHAT_REQUEST, message)
                 text_input_widget.text = ""
+                # --- MODIFIED: Re-focus after sending ---
+                self.ids.text_input.focus = True
             except Exception as e:
                 print(f"CRITICAL ERROR: Failed to publish MQTT message: {e}")
                 self.ids.chat_history.text += f"[color=FF0000]Error: Could not send message.[/color]\n"
         else:
             print("ERROR: Cannot send message. No main_layout or mqtt_client found.")
 
-# --- PLANT INFO POPUP CLASS ---
-class PlantInfoPopup(Popup):
-    pass
+    def mic_pressed(self):
+        print("Mic button pressed! (Voice input not implemented yet)")
+        self.ids.chat_history.text += f"[color=AAAAAA]Voice input is not connected yet...[/color]\n"
 
-# --- LIVE DATA POPUP CLASS ---
-class LiveDataPopup(Popup):
+
+# --- MODIFIED: Changed from Popup to ModalView ---
+class PlantInfoPopup(ModalView):
+    # --- MODIFIED: Added main_layout property and dismiss method ---
+    main_layout = ObjectProperty(None)
+    
+    def on_dismiss(self):
+        if self.main_layout:
+            self.main_layout.popup_is_open = False
+
+# --- MODIFIED: Changed from Popup to ModalView ---
+class LiveDataPopup(ModalView):
     main_layout = ObjectProperty(None)
     
     def on_dismiss(self):
         print("Live Data popup closed.")
         if self.main_layout:
             self.main_layout.live_data_popup = None
+            # --- MODIFIED: Clear the focus flag ---
+            self.main_layout.popup_is_open = False
 
 # --- MAIN LAYOUT CLASS ---
 class MainLayout(FloatLayout):
@@ -302,6 +328,9 @@ class MainLayout(FloatLayout):
     mqtt_client = None
     live_data_popup = ObjectProperty(None, allownone=True)
     ai_popup = ObjectProperty(None, allownone=True)
+    
+    # --- MODIFIED: Added new flag for focus fix ---
+    popup_is_open = BooleanProperty(False)
 
     base_image_path = os.path.expanduser("~/Documents/MiniProject/images")
     image_map = {
@@ -315,8 +344,6 @@ class MainLayout(FloatLayout):
         "touched": os.path.join(base_image_path, "plant_touched.jpeg"),
         "neutral": os.path.join(base_image_path, "happy_plant.jpeg"),
     }
-
-    # <--- REMOVED: The entire 'speak' function is gone. ---
     
     def on_kv_post(self, base_widget):
         print("UI is ready. Starting with default image.")
@@ -347,21 +374,27 @@ class MainLayout(FloatLayout):
         self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=CLIENT_ID)
         self.mqtt_client.on_connect = on_connect
         self.mqtt_client.on_message = on_message
-        self.mqtt_client.connect(BROKER_ADDRESS)
-        self.mqtt_client.loop_start()
+        try:
+            self.mqtt_client.connect(BROKER_ADDRESS)
+            self.mqtt_client.loop_start()
+        except Exception as e:
+            print(f"MQTT Connection Error: {e}. Check if broker is running.")
 
     def update_with_live_data(self, *args):
         if self.live_data_popup:
             return
         print("--- 'Live Data' button pressed. Opening popup and sending request. ---")
+        # --- MODIFIED: Set the focus flag ---
+        self.popup_is_open = True
         popup = LiveDataPopup()
         popup.main_layout = self
         self.live_data_popup = popup
         popup.open()
-        if self.mqtt_client:
+        if self.mqtt_client and self.mqtt_client.is_connected():
             self.mqtt_client.publish(TOPIC_SENSOR_REQUEST, "update_now")
+        else:
+            print("MQTT not connected. Cannot request sensor data.")
 
-    # <--- MODIFIED: This function no longer speaks ---
     def update_ui_visuals(self, data):
         """Receives the full payload OR a partial payload."""
         
@@ -375,14 +408,15 @@ class MainLayout(FloatLayout):
         # --- Update Chat (from chat agent) ---
         if speech_text:
             print(f"AI Chat Response: '{speech_text}'")
-            # self.speak(speech_text) <--- REMOVED
-            
-            # Add AI's response to the chat window if it's open
+            # --- MODIFIED: Check if popup exists before updating ---
             if self.ai_popup:
                 self.ai_popup.ids.chat_history.text += f"[color=00FF7F]PlantAI:[/color] {speech_text}\n"
 
         # --- Update Mood/Image (from mood agent) ---
-        if mood:
+        # --- MODIFIED: Added check for popup_is_open ---
+        if mood and not self.popup_is_open:
+            print(f"AI Decision: Mood='{mood}' (Not updating image, popup is open)")
+        elif mood:
             print(f"AI Decision: Mood='{mood}'")
             new_image_source = self.image_map.get(mood, self.image_map["neutral"])
             print(f"Updating image to mood: {mood}")
@@ -402,7 +436,6 @@ class MainLayout(FloatLayout):
                 popup_ids.moisture_label.text = f"Soil Moisture: {int(moisture)} %"
                 
     def _transition_to_image(self, new_source):
-        # ... (This function is unchanged) ...
         if self.current_image_path == new_source:
             return
         print(f"Transition requested to: {new_source}")
@@ -419,7 +452,6 @@ class MainLayout(FloatLayout):
         Clock.schedule_once(self.start_transition, 0.05)
 
     def start_transition(self, dt):
-        # ... (This function is unchanged) ...
         active_screen = getattr(self.ids, f'video_screen_{self.active_screen_id}')
         inactive_screen_id = 'b' if self.active_screen_id == 'a' else 'a'
         inactive_screen = getattr(self.ids, f'video_screen_{inactive_screen_id}')
@@ -429,12 +461,15 @@ class MainLayout(FloatLayout):
         Animation(opacity=1, duration=0.7).start(inactive_screen)
 
     def on_fade_out_complete(self, animation, faded_out_widget):
-        # ... (This function is unchanged) ...
         self.active_screen_id = 'b' if self.active_screen_id == 'a' else 'a'
         print(f"Fade complete. Active screen is now: video_screen_{self.active_screen_id}")
 
     def play_touch_effect(self):
-        # ... (This function is unchanged) ...
+        # --- MODIFIED: Check flag before playing effect ---
+        if self.popup_is_open:
+            print("Touch ignored, popup is open.")
+            return
+            
         if self.touch_revert_event:
             self.touch_revert_event.cancel()
             self.touch_revert_event = None
@@ -450,17 +485,18 @@ class MainLayout(FloatLayout):
             print("No 'touched' image defined.")
 
     def on_touch_effect_finished(self, dt):
-        # ... (This function is unchanged) ...
         print("Touch effect finished. Reverting...")
         self.touch_revert_event = None
         revert_target = self.image_to_revert_to if self.image_to_revert_to else self.image_map['neutral']
         self._transition_to_image(revert_target)
         self.image_to_revert_to = ""
 
-    # <--- MODIFIED: Removed 'speak' calls ---
     def show_plant_ai(self):
         print("PlantAI button pressed.")
-        # self.speak("My AI is online and monitoring.") <--- REMOVED
+        if self.ai_popup:
+            return
+        # --- MODIFIED: Set the focus flag ---
+        self.popup_is_open = True
         popup = PlantAiPopup()
         popup.main_layout = self 
         self.ai_popup = popup
@@ -468,8 +504,11 @@ class MainLayout(FloatLayout):
         
     def show_plant_info(self):
         print("Plant Info button pressed.")
-        # self.speak("Here is some information about your plant.") <--- REMOVED
+        # --- MODIFIED: Set the focus flag ---
+        self.popup_is_open = True
         popup = PlantInfoPopup()
+        # --- MODIFIED: Pass main_layout to the info popup ---
+        popup.main_layout = self
         popup.open()
         
 class PlantApp(App):
@@ -483,11 +522,12 @@ class PlantApp(App):
             self.main_layout.touch_revert_event.cancel()
         
         if self.main_layout.mqtt_client:
-            self.main_layout.mqtt_client.loop_stop()
-            self.main_layout.mqtt_client.disconnect()
-        
-        # pygame.quit() <--- REMOVED
-        
+            if self.main_layout.mqtt_client.is_connected():
+                self.main_layout.mqtt_client.loop_stop()
+                self.main_layout.mqtt_client.disconnect()
+            else:
+                self.main_layout.mqtt_client.loop_stop()
+
 if __name__ == '__main__':
     Window.softinput_mode = 'pan'
     PlantApp().run()
