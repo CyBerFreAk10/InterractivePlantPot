@@ -1,6 +1,6 @@
 # PlantMate: Interactive Smart Plant Pot 🌱🤖
 
-## Overview
+## Overview 
 
 PlantMate is an IoT-powered smart plant pot designed to seamlessly connect environmental monitoring with an interactive user interface and local AI. This project bridges the gap between hardware sensors, microcontrollers, and intelligent backend processing to create a responsive, conversational planter that tells you exactly what it needs.
 
