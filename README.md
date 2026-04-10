@@ -2,7 +2,11 @@
 
 ## Overview 
 
-PlantMate is an IoT-powered smart plant pot designed to seamlessly connect environmental monitoring with an interactive user interface and local AI. This project bridges the gap between hardware sensors, microcontrollers, and intelligent backend processing to create a responsive, conversational planter that tells you exactly what it needs.
+Plant care is often a guessing game, and current tech solutions fall short: simple reminder apps aren't adaptive, and fully automated watering systems remove the user from the care process entirely.
+
+PlantMate bridges this gap by transforming a standard plant pot into a conversational AI companion. By integrating real-time environmental sensors with a local LLM and an animated TFT display, PlantMate gives the plant a "personality." It can visually express its emotions (e.g., feeling thirsty or happy) and hold two-way voice conversations, changing plant care from a confusing chore into a fun, interactive experience.
+
+---
 
 ## Key Features
 
@@ -35,6 +39,8 @@ PlantMate is an IoT-powered smart plant pot designed to seamlessly connect envir
 * **Networking & Communication:** MQTT (`paho-mqtt`), PySerial
 
 * **AI Backend & Audio:** Ollama (`gemma 2b`), `faster_whisper` (Speech-to-Text), `gTTS` (Google Text-to-Speech)
+
+---
 
 ## The Team & Division of Labor
 
